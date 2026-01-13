@@ -14,9 +14,9 @@ type User struct {
 	LastName       string `db:"last_name"       json:"lastName"`
 	Email          string `db:"email"           json:"email"`
 	HashedPassword string `db:"hashed_password" json:"hashed_password"`
-	Phone          string `db:"phone"           json:"phone,omitempty"`
-	Age            int    `db:"age"             json:"age,omitempty"`
-	Job            string `db:"job"             json:"job,omitempty"`
+	Phone          string `db:"phone"           json:"phone"`
+	Age            int    `db:"age"             json:"age"`
+	Job            string `db:"job"             json:"job"`
 }
 
 func DbInit(db *sql.DB) error {
@@ -87,17 +87,14 @@ func InsertUser(db *sql.DB, user User) error {
 }
 
 func GetUserByEmail(db *sql.DB, email string) (User, error) {
-	const getUserByEmailStmt = `SELECT * FROM users WHERE email = ? LIMIT 1; `
-	stmt, err := db.Prepare(getUserByEmailStmt)
-	if err != nil {
-		log.Printf("\ncan't Prepare user info statement : %v", err)
-		return User{}, nil
-	}
-
-	defer stmt.Close()
-
 	var u User
-	err = stmt.QueryRow(email).Scan(&u)
+	err := db.QueryRow(
+		`SELECT * FROM users WHERE email = ? LIMIT 1; `,
+		email,
+	).Scan(&u.ID, &u.FirstName, &u.LastName, &u.Email, &u.HashedPassword, &u.Phone, &u.Age, &u.Job)
+	if err != nil {
+		return User{}, err
+	}
 
 	return u, nil
 }
