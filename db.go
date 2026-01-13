@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -12,7 +13,7 @@ type User struct {
 	FirstName      string `db:"first_name"      json:"firstName"`
 	LastName       string `db:"last_name"       json:"lastName"`
 	Email          string `db:"email"           json:"email"`
-	HashedPassword string `db:"hashed_password" json:"-"`
+	HashedPassword string `db:"hashed_password" json:"hashed_password"`
 	Phone          string `db:"phone"           json:"phone,omitempty"`
 	Age            int    `db:"age"             json:"age,omitempty"`
 	Job            string `db:"job"             json:"job,omitempty"`
@@ -40,6 +41,32 @@ func DbInit(db *sql.DB) error {
 	return nil
 }
 
+func UserExists(db *sql.DB, email string, password string) (bool, error) {
+	if email == "" || password == "" {
+		err := errors.New("empty email or password")
+		return false, err
+	}
+
+	var hPass string
+
+	err := db.QueryRow(`select hashed_password from users where email = ?  LIMIT 1;`,
+		email).Scan(&hPass)
+
+	if CheckPasswordHash(password, hPass) {
+		return true, nil
+	} else {
+	}
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return false, nil
+}
+
 func InsertUser(db *sql.DB, user User) error {
 	insertUser := `INSERT INTO users (first_name, last_name, email, hashed_password, phone, age, job) 
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -51,42 +78,32 @@ func InsertUser(db *sql.DB, user User) error {
 	}
 	rows, err := insertionResult.RowsAffected()
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 	if rows != 1 {
-		log.Fatalf("expected to affect 1 row, affected %d", rows)
+		log.Printf("expected to affect 1 row, affected %d", rows)
 	}
 	return nil
 }
 
 func GetUserByEmail(db *sql.DB, email string) (User, error) {
-	const getUserByEmailStmt = "SELECT * FROM users WHERE email = ? LIMIT 1; "
+	const getUserByEmailStmt = `SELECT * FROM users WHERE email = ? LIMIT 1; `
 	stmt, err := db.Prepare(getUserByEmailStmt)
 	if err != nil {
-		log.Printf("\ncan't Prepare statement : %v", err)
+		log.Printf("\ncan't Prepare user info statement : %v", err)
 		return User{}, nil
 	}
 
 	defer stmt.Close()
 
 	var u User
-	err = stmt.QueryRow(email).Scan(
-		&u.ID,
-		&u.FirstName,
-		&u.LastName,
-		&u.Email,
-		&u.HashedPassword,
-		&u.Phone,
-		&u.Age,
-		&u.Job,
-	)
+	err = stmt.QueryRow(email).Scan(&u)
 
 	return u, nil
 }
 
-func GetAllUser(db *sql.DB, email string) ([]User, error) {
-	rows, err := db.Query("select * from users ")
+func GetAllUsers(db *sql.DB, email string) ([]User, error) {
+	rows, err := db.Query(`select * from users `)
 	if err != nil {
 		return []User{}, err
 	}
@@ -97,9 +114,9 @@ func GetAllUser(db *sql.DB, email string) ([]User, error) {
 
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u); err != nil {
-			log.Fatal(err)
-			log.Printf("\ncan't Prepare statement : %v", err)
+		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.Email,
+			&u.HashedPassword, &u.Phone, &u.Age, &u.Job); err != nil {
+			log.Printf("\ncan't copy value to user struct : %v", err)
 		}
 		users = append(users, u)
 	}

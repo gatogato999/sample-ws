@@ -55,13 +55,90 @@ func main() {
 	// manage http server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(res, "implemented routes:\n POST /register\n")
+		fmt.Fprintf(res, "implemented routes:\n POST /register\n GET /users")
 	})
 	mux.HandleFunc("POST /register", handleRegister(db))
+	mux.HandleFunc("GET /users", handleGetAllUsers(db))
+	mux.HandleFunc("POST /auth", handleLogin(db))
 
 	// serve
 	fmt.Printf("listening at http://localhost:8080")
 	http.ListenAndServe(":8080", mux)
+}
+
+func handleLogin(db *sql.DB) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		type LoginRequest struct {
+			Email          string `db:"email"           json:"email"`
+			HashedPassword string `db:"hashed_password" json:"hashed_password"`
+		}
+
+		var logginRequest LoginRequest
+		decoder := json.NewDecoder(req.Body)
+		decoder.DisallowUnknownFields()
+		err := decoder.Decode(&logginRequest)
+		if err != nil {
+			http.Error(res,
+				" invalid json body",
+				http.StatusBadRequest)
+			return
+		}
+		exist, err := UserExists(db, logginRequest.Email, logginRequest.HashedPassword)
+		if exist {
+			res.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(res).Encode(map[string]string{"msg": "logged in sucessfully"})
+		}
+		if err != nil {
+			log.Printf("\n%v\n", err)
+			http.Error(res,
+				"\n bad request body",
+				http.StatusBadRequest)
+			return
+		}
+		if !exist {
+			res.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(res).Encode(map[string]string{"msg": "invalid email or password"})
+
+		}
+		// res.Header().Set("Content-Type", "application/json")
+	}
+}
+
+func handleGetAllUsers(db *sql.DB) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		var u User
+		err := json.NewDecoder(req.Body).Decode(&u)
+		if err != nil {
+			log.Printf("\n%v\n", err)
+			http.Error(res,
+				"\n can't get email from request body",
+				http.StatusBadRequest)
+			return
+		}
+		if u.Email == "" {
+			http.Error(
+				res,
+				"\nwrong body ",
+				http.StatusInternalServerError,
+			)
+			return
+
+		}
+		users, err := GetAllUsers(db, u.Email)
+		if err != nil {
+			http.Error(
+				res,
+				"\nfailed to get users from the database",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(res).Encode(users); err != nil {
+			http.Error(res, "\nfailed to encode users", http.StatusInternalServerError)
+		}
+	}
 }
 
 func handleRegister(db *sql.DB) http.HandlerFunc {
@@ -74,31 +151,34 @@ func handleRegister(db *sql.DB) http.HandlerFunc {
 				http.StatusBadRequest)
 			return
 		}
+		hash, _ := bcrypt.GenerateFromPassword([]byte(u.HashedPassword), 14)
 
-		u.HashedPassword, err = HassPassword(u.HashedPassword)
-		if err != nil {
-			log.Printf("\ncan't generate a password : %v", err)
-			res.WriteHeader(http.StatusBadRequest)
-			return
-		}
+		u.HashedPassword = string(hash)
 
 		if u.Email == "" {
-			log.Printf("\ncan't leave the email field empty")
 			res.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		err = InsertUser(db, u)
 		if err != nil {
-			log.Printf("\ncan't insert a new user : %v", err)
 			res.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
+		res.Header().Set("Content-Type", "application/json")
 		res.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(res).Encode(map[string]string{"msg": "new user created"}); err != nil {
+			http.Error(res, "\nfailed to encode ", http.StatusInternalServerError)
+		}
 	}
 }
 
-func HassPassword(password string) (string, error) {
+func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	return string(bytes), err
+}
+
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }

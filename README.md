@@ -13,21 +13,27 @@
 - init the go mod 
 ```go mod init github.com/gatogato999/sample-ws ```
 - install the dependincies (mysql-driver, jwt, bcrypt, gotdotenv)
-``` go get .```
+``` go get tidy```
 
 ## To-Implement
 
 - [x] use .env to store secrets (instead fo hardcoding it)
 - [x] check connection to the database
 - [ ] make functions to deal with the database.
- - [ ] get a user by email
- - [ ] insert a user to the database
-- [ ] make the http server
+ - [x] insert a user to the database
+ - [x] get all users.
+- [x] make the http server
 - [ ] make "/auth" route : send{username, password}, and return JWT token 
-- [ ] make "/query" route : send {token,email}, and return all information
+ - [x]  users email and password should match stored ones.
+ - [ ] create a jwt and send it to the user.
+- [ ] make "/query" route : send {token}, and return all information
+ - [ ] create a protected route (add a middleware)
+ - [ ] get a body request from the user 
+ - [ ] verify the token and in the body
+ - [ ] send user info to the specified user.
 
 ## Note
 
-- [ ] users info is stored in a mysql (maria) database, retrived by "/query".
-- [ ] to modularize the app
+- [ ] modularize the app
 - [ ] graceful shutdown for the db connection and the server.
+- [ ] add more accurate status code and error handling
