@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -85,8 +86,30 @@ func handleLogin(db *sql.DB) http.HandlerFunc {
 		}
 		exist, err := UserExists(db, logginRequest.Email, logginRequest.HashedPassword)
 		if exist {
-			res.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(res).Encode(map[string]string{"msg": "logged in sucessfully"})
+			// jwt
+			jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+			// remove this
+			log.Println("secret")
+			log.Println(string(jwtSecret))
+			if string(jwtSecret) == "" {
+				log.Printf("\nsome secerts aren't set")
+				return
+			}
+			token, err := createJwt(logginRequest.Email, jwtSecret)
+			// FIXME: remove this
+			log.Println("email")
+			log.Println(logginRequest.Email)
+			log.Println("token")
+			log.Println(token)
+			log.Println("err")
+			log.Println(err)
+			if err != nil {
+				http.Error(res, "could not create token", http.StatusInternalServerError)
+				return
+			}
+			res.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(res).
+				Encode(map[string]string{"token": token, "msg": "logged in sucessfully"})
 		}
 		if err != nil {
 			log.Printf("\n%v\n", err)
@@ -98,10 +121,19 @@ func handleLogin(db *sql.DB) http.HandlerFunc {
 		if !exist {
 			res.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(res).Encode(map[string]string{"msg": "invalid email or password"})
-
 		}
-		// res.Header().Set("Content-Type", "application/json")
 	}
+}
+
+func createJwt(email string, secret []byte) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":   email,
+		"email": email,
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(secret)
 }
 
 func handleGetAllUsers(db *sql.DB) http.HandlerFunc {
