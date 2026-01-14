@@ -32,6 +32,7 @@
  - [x] get a body request from the user 
  - [x] verify the token and in the body
  - [x] send user info to the specified user.
+- [x] make server response only in json fromat
 - [ ] modularize the app
 - [ ] graceful shutdown for the db connection and the server.
 - [ ] add more accurate status code and error handling
