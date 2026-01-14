@@ -41,6 +41,12 @@ func DbInit(db *sql.DB) error {
 	return nil
 }
 
+func EmailExists(db *sql.DB, email string) error {
+	var temp string
+	err := db.QueryRow(`select email from users where email = ?  LIMIT 1;`, email).Scan(&temp)
+	return err
+}
+
 func UserExists(db *sql.DB, email string, password string) (bool, error) {
 	if email == "" || password == "" {
 		err := errors.New("empty email or password")

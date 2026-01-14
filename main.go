@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/mail"
 	"os"
 	"strings"
 	"time"
@@ -27,7 +28,7 @@ func main() {
 
 	dbPassword := os.Getenv("DBPASS")
 	if dbPassword == "" {
-		log.Printf("\nsome secerts arent set")
+		log.Fatal("\nsome secerts arent set")
 		return
 	}
 
@@ -41,12 +42,10 @@ func main() {
 		dbUser, dbPassword, dbHost, dbPort, dbName)
 	db, err := sql.Open("mysql", databaseSource)
 	if err != nil {
-		log.Printf("\ncan't open the database : %v", err)
+		log.Fatal(err)
 		return
 	}
-	db.SetConnMaxLifetime(time.Minute * 3)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
+
 	defer db.Close()
 
 	err = db.Ping()
@@ -58,9 +57,16 @@ func main() {
 	// manage http server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(
+		useJson(
 			res,
-			"implemented routes:\n POST /register\n GET /users\n POST /auth\n POST /query/{email}",
+			http.StatusOK,
+			map[string]string{
+				"msg": `implemented routes:
+				POST /register
+				GET /users
+				POST /auth
+				POST /query/{email}`,
+			},
 		)
 	})
 	mux.HandleFunc("POST /register", handleRegister(db))
@@ -73,33 +79,40 @@ func main() {
 	http.ListenAndServe(":8080", mux)
 }
 
+func useJson(res http.ResponseWriter, status int, data any) error {
+	res.Header().Set("Content-Type", "application/json; charset=utf-8")
+	res.WriteHeader(status)
+	if err := json.NewEncoder(res).Encode(data); err != nil {
+		log.Printf("encoding error : %v", err)
+		return err
+	}
+	return nil
+}
+
 func handleQuery(db *sql.DB) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		token := req.Header.Get("Authorization")
-		if token == "" {
-			http.Error(res, "empty Authorization header", http.StatusBadRequest)
-			return
-		}
-		if !strings.HasPrefix(token, "Bearer ") {
-			http.Error(res, "invalid Authorization header", http.StatusBadRequest)
-			return
-		}
 		pathParmValue := req.PathValue("email")
 		if pathParmValue == "" {
-			http.Error(res, "empty query parameter; insert an email", http.StatusBadRequest)
+			// http.Error(res, "empty query parameter; insert an email", http.StatusBadRequest)
+			useJson(
+				res,
+				http.StatusBadRequest,
+				map[string]string{"error": "empty query parameter; insert an email"},
+			)
 			return
 		}
-		if !strings.Contains(pathParmValue, "@") {
-
-			http.Error(res, "invalid email", http.StatusBadRequest)
+		_, err := mail.ParseAddress(pathParmValue)
+		if err != nil {
+			// http.Error(res, "invalid email", http.StatusBadRequest)
+			useJson(res, http.StatusBadRequest, map[string]string{"error": "invalid email"})
 			return
 		}
-		// fmt.Fprintf(res, "\nemail : %s\n token : %s\n", pathParmValue, token)
-		// res.WriteHeader(http.StatusAccepted)
 		// verify token Bearer
 		token = strings.TrimPrefix(token, "Bearer ")
 		if _, err := verifyJwt(token); err != nil {
-			http.Error(res, "invalid token", http.StatusUnauthorized)
+			// http.Error(res, "invalid token", http.StatusUnauthorized)
+			useJson(res, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
 
@@ -107,29 +120,24 @@ func handleQuery(db *sql.DB) http.HandlerFunc {
 		u, err := GetUserByEmail(db, pathParmValue)
 		if err != nil {
 			log.Println("\ndatabase error : ", err)
-			http.Error(
+			// http.Error(
+			// 	res,
+			// 	"can't get user form the database",
+			// 	http.StatusInternalServerError,
+			// )
+			useJson(
 				res,
-				"can't get user form the database",
 				http.StatusInternalServerError,
+				map[string]string{"error": fmt.Sprint("db error : ", err)},
 			)
 		} else {
-			// fmt.Fprintf(res, "id: %d\nfName: %s\nlName: %s\nemail: %s\npass: %s\nphone: %s\nage: %d\njob: %s\n",
-			// 	u.ID, u.FirstName, u.LastName, u.Email, u.HashedPassword, u.Phone, u.Age, u.Job)
-
-			res.Header().Set("Content-Type", "application/json")
+			// res.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(res).Encode(u); err != nil {
 				http.Error(res, "\nfailed to encode users", http.StatusInternalServerError)
+				useJson(res, http.StatusInternalServerError, map[string]string{"error": fmt.Sprint("encoding failed : ", err)})
 			}
 		}
 	}
-}
-
-func AuthMeddleWare(next http.Handler) http.Handler {
-	return http.HandlerFunc(
-		func(res http.ResponseWriter, req *http.Request) {
-			next.ServeHTTP(res, req)
-		},
-	)
 }
 
 func verifyJwt(tokenString string) (*jwt.RegisteredClaims, error) {
@@ -170,38 +178,53 @@ func handleLogin(db *sql.DB) http.HandlerFunc {
 		decoder.DisallowUnknownFields()
 		err := decoder.Decode(&logginRequest)
 		if err != nil {
-			http.Error(res,
-				" invalid json body",
-				http.StatusBadRequest)
+			useJson(res, http.StatusBadRequest, map[string]string{"error": "can't handle request"})
 			return
 		}
 		exist, err := UserExists(db, logginRequest.Email, logginRequest.HashedPassword)
 		if exist {
-			// jwt
 			jwtSecret := []byte(os.Getenv("JWT_SECRET"))
 			if string(jwtSecret) == "" {
-				log.Printf("\nsome secerts aren't set")
+				log.Fatal("\nsome secerts aren't set")
+				useJson(
+					res,
+					http.StatusInternalServerError,
+					map[string]string{"error": "server config error"},
+				)
 				return
 			}
 			token, err := createJwt(logginRequest.Email, jwtSecret)
 			if err != nil {
-				http.Error(res, "could not create token", http.StatusInternalServerError)
+				useJson(
+					res,
+					http.StatusInternalServerError,
+					map[string]string{"error": "token creation error"},
+				)
 				return
 			}
-			res.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(res).
-				Encode(map[string]string{"token": token, "msg": "logged in sucessfully"})
+			useJson(
+				res,
+				http.StatusCreated,
+				map[string]string{
+					"msg":   "logged in sucessfully",
+					"token": token,
+				},
+			)
+			return
 		}
 		if err != nil {
-			log.Printf("\n%v\n", err)
-			http.Error(res,
-				"\n bad request body",
-				http.StatusBadRequest)
+			log.Printf("%v", err)
+			useJson(res,
+				http.StatusNotFound,
+				map[string]string{"error": "invalid email or password"})
 			return
 		}
 		if !exist {
-			res.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(res).Encode(map[string]string{"msg": "invalid email or password"})
+			useJson(
+				res,
+				http.StatusNotFound,
+				map[string]string{"error": "invalid email or password"},
+			)
 		}
 	}
 }
@@ -222,35 +245,27 @@ func handleGetAllUsers(db *sql.DB) http.HandlerFunc {
 		var u User
 		err := json.NewDecoder(req.Body).Decode(&u)
 		if err != nil {
-			log.Printf("\n%v\n", err)
-			http.Error(res,
-				"\n can't get email from request body",
-				http.StatusBadRequest)
+			log.Printf("\n%v", err)
+			useJson(res, http.StatusBadRequest, map[string]string{"error": "can't get body"})
 			return
 		}
-		if u.Email == "" {
-			http.Error(
-				res,
-				"\nwrong body ",
-				http.StatusInternalServerError,
-			)
-			return
 
+		_, err = mail.ParseAddress(u.Email)
+		if err != nil {
+			useJson(res, http.StatusBadRequest, map[string]string{"error": "invalid email"})
+			return
 		}
+
 		users, err := GetAllUsers(db, u.Email)
 		if err != nil {
-			http.Error(
+			useJson(
 				res,
-				"\nfailed to get users from the database",
 				http.StatusInternalServerError,
+				map[string]string{"error": fmt.Sprint("database error", err)},
 			)
 			return
 		}
-		res.Header().Set("Content-Type", "application/json")
-		res.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(res).Encode(users); err != nil {
-			http.Error(res, "\nfailed to encode users", http.StatusInternalServerError)
-		}
+		useJson(res, http.StatusOK, users)
 	}
 }
 
@@ -259,30 +274,42 @@ func handleRegister(db *sql.DB) http.HandlerFunc {
 		var u User
 		err := json.NewDecoder(req.Body).Decode(&u)
 		if err != nil {
-			http.Error(res,
-				err.Error(),
-				http.StatusBadRequest)
+			useJson(res, http.StatusBadRequest, map[string]string{"error": "bad request body"})
 			return
 		}
-		hash, _ := bcrypt.GenerateFromPassword([]byte(u.HashedPassword), 14)
+		hash, err := bcrypt.GenerateFromPassword([]byte(u.HashedPassword), 14)
+		if err != nil {
+			useJson(
+				res,
+				http.StatusInternalServerError,
+				map[string]string{"error": "user creation error"},
+			)
+			return
+		}
 
 		u.HashedPassword = string(hash)
 
-		if u.Email == "" {
-			res.WriteHeader(http.StatusBadRequest)
+		_, err = mail.ParseAddress(u.Email)
+		if err != nil {
+			useJson(res, http.StatusBadRequest, map[string]string{"error": "invalid email"})
+			return
+		}
+
+		err = EmailExists(db, u.Email)
+		if err == nil {
+			useJson(res, http.StatusBadRequest, map[string]string{"error": " already used email"})
 			return
 		}
 		err = InsertUser(db, u)
 		if err != nil {
-			res.WriteHeader(http.StatusBadRequest)
+			useJson(
+				res,
+				http.StatusInternalServerError,
+				map[string]string{"error": "database error"},
+			)
 			return
 		}
-
-		res.Header().Set("Content-Type", "application/json")
-		res.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(res).Encode(map[string]string{"msg": "new user created"}); err != nil {
-			http.Error(res, "\nfailed to encode ", http.StatusInternalServerError)
-		}
+		useJson(res, http.StatusCreated, map[string]string{"msg": "new user created"})
 	}
 }
 
