@@ -33,6 +33,7 @@
  - [x] verify the token and in the body
  - [x] send user info to the specified user.
 - [x] make server response only in json fromat
+- [ ] sesitize body inputs and check for sql injection
 - [ ] modularize the app
 - [ ] graceful shutdown for the db connection and the server.
 - [ ] add more accurate status code and error handling

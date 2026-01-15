@@ -70,13 +70,30 @@ func main() {
 		)
 	})
 	mux.HandleFunc("POST /register", handleRegister(db))
-	mux.HandleFunc("GET /users", handleGetAllUsers(db))
+	mux.HandleFunc("POST /users", handleGetAllUsers(db))
 	mux.HandleFunc("POST /auth", handleLogin(db))
 	mux.HandleFunc("POST /query/{email}", handleQuery(db))
 
 	// serve
 	fmt.Printf("listening at http://localhost:8080")
-	http.ListenAndServe(":8080", mux)
+	http.ListenAndServe(":8080", withCors(mux))
+}
+
+func withCors(next http.Handler) http.Handler {
+	return http.HandlerFunc(
+		func(res http.ResponseWriter, req *http.Request) {
+			res.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+			res.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			res.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			res.Header().Set("Content-Security-Policy",
+				"script-src 'self' 'unsafe-eval' 'unsafe-inline'")
+			if req.Method == http.MethodOptions {
+				res.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(res, req)
+		},
+	)
 }
 
 func useJson(res http.ResponseWriter, status int, data any) error {
@@ -256,6 +273,9 @@ func handleGetAllUsers(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		type UsersRes struct {
+			Users []User `json:"users"`
+		}
 		users, err := GetAllUsers(db, u.Email)
 		if err != nil {
 			useJson(
@@ -265,7 +285,10 @@ func handleGetAllUsers(db *sql.DB) http.HandlerFunc {
 			)
 			return
 		}
-		useJson(res, http.StatusOK, users)
+		numberOfUsers := len(users)
+		uRes := map[string]any{"users": users, "numberOfUsers": numberOfUsers}
+		// UsersRes{Users: users}
+		useJson(res, http.StatusOK, uRes)
 	}
 }
 
