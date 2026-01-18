@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -16,17 +15,27 @@ import (
 func ProtectRoute(next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(res http.ResponseWriter, req *http.Request) {
-			AuthorizationHeader := req.Header.Get("Authorization")
-			if AuthorizationHeader == "" {
-				UseJson(
-					res,
-					http.StatusUnauthorized,
-					map[string]string{"error": "empty Authorization header"},
-				)
-				return
+			cookie, err := req.Cookie("jwt_token")
+			if err != nil {
+				if err == http.ErrNoCookie {
+					UseJson(
+						res,
+						http.StatusUnauthorized,
+						map[string]string{"error": "Unauthorized"},
+					)
+					return
+				} else {
+
+					UseJson(
+						res,
+						http.StatusBadRequest,
+						map[string]string{"error": "bad request"},
+					)
+					return
+				}
 			}
 
-			token := strings.TrimPrefix(AuthorizationHeader, "Bearer ")
+			token := cookie.Value
 
 			if _, err := verifyJwt(token); err != nil {
 				UseJson(
