@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/mail"
 	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
@@ -90,6 +91,16 @@ func HandleLogin(db *sql.DB) http.HandlerFunc {
 				)
 				return
 			}
+			cookie := http.Cookie{
+				Name:     "jwt_token",
+				Value:    token,
+				Path:     "/",                              // optional
+				Expires:  time.Now().Add(30 * time.Minute), // optional
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			http.SetCookie(res, &cookie)
 			UseJson(
 				res,
 				http.StatusCreated,
@@ -119,24 +130,7 @@ func HandleLogin(db *sql.DB) http.HandlerFunc {
 
 func HandleGetAllUsers(db *sql.DB) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		var u User
-		err := json.NewDecoder(req.Body).Decode(&u)
-		if err != nil {
-			log.Printf("\n%v", err)
-			UseJson(res, http.StatusBadRequest, map[string]string{"error": "can't get body"})
-			return
-		}
-
-		_, err = mail.ParseAddress(u.Email)
-		if err != nil {
-			UseJson(res, http.StatusBadRequest, map[string]string{"error": "invalid email"})
-			return
-		}
-
-		type UsersRes struct {
-			Users []User `json:"users"`
-		}
-		users, err := GetAllUsers(db, u.Email)
+		users, err := GetAllUsers(db)
 		if err != nil {
 			UseJson(
 				res,

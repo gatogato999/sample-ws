@@ -105,7 +105,7 @@ func GetUserByEmail(db *sql.DB, email string) (User, error) {
 	return u, nil
 }
 
-func GetAllUsers(db *sql.DB, email string) ([]User, error) {
+func GetAllUsers(db *sql.DB) ([]User, error) {
 	rows, err := db.Query(`select * from users `)
 	if err != nil {
 		return []User{}, err
