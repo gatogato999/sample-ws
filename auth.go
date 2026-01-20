@@ -55,7 +55,7 @@ func createJwt(email string, secret []byte) (string, error) {
 		"sub":   email,
 		"email": email,
 		"iat":   time.Now().Unix(),
-		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"exp":   time.Now().Add(3 * time.Minute).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)

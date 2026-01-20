@@ -19,7 +19,7 @@ func main() {
 	mux.HandleFunc("POST /register", HandleRegister(db))
 	mux.HandleFunc("GET /users", ProtectRoute(HandleGetAllUsers(db)))
 	mux.HandleFunc("POST /auth", HandleLogin(db))
-	mux.HandleFunc("POST /query/{email}", ProtectRoute(HandleQuery(db)))
+	mux.HandleFunc("GET /query/{email}", ProtectRoute(HandleQuery(db)))
 
 	fmt.Printf("listening at http://localhost:8080")
 	http.ListenAndServe(":8080", withCors(mux))

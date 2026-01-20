@@ -40,8 +40,6 @@ func HandleQuery(db *sql.DB) http.HandlerFunc {
 			UseJson(res, http.StatusBadRequest, map[string]string{"error": "invalid email"})
 			return
 		}
-
-		// get user
 		u, err := GetUserByEmail(db, pathParmValue)
 		if err != nil {
 			UseJson(
@@ -94,8 +92,8 @@ func HandleLogin(db *sql.DB) http.HandlerFunc {
 			cookie := http.Cookie{
 				Name:     "jwt_token",
 				Value:    token,
-				Path:     "/",                              // optional
-				Expires:  time.Now().Add(30 * time.Minute), // optional
+				Path:     "/",                             // optional
+				Expires:  time.Now().Add(3 * time.Minute), // optional
 				Secure:   true,
 				HttpOnly: true,
 				SameSite: http.SameSiteLaxMode,
@@ -105,8 +103,7 @@ func HandleLogin(db *sql.DB) http.HandlerFunc {
 				res,
 				http.StatusCreated,
 				map[string]string{
-					"msg":   "logged in sucessfully",
-					"token": token,
+					"msg": "logged in sucessfully",
 				},
 			)
 			return
@@ -141,7 +138,6 @@ func HandleGetAllUsers(db *sql.DB) http.HandlerFunc {
 		}
 		numberOfUsers := len(users)
 		uRes := map[string]any{"users": users, "numberOfUsers": numberOfUsers}
-		// UsersRes{Users: users}
 		UseJson(res, http.StatusOK, uRes)
 	}
 }
