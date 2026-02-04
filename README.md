@@ -20,7 +20,6 @@
 - [x] use .env to store secrets (instead fo hardcoding it)
 - [x] check connection to the database
 - [x] make functions to deal with the database.
- - [x] insert a user to the database
  - [x] get all users.
  - [x] get a user by email 
 - [x] make the http server
@@ -32,7 +31,7 @@
  - [x] send user info to the specified user.
 - [x] make server response only in json fromat
 - [x] seperate the db access to "access.go"
-- [x] protect `query` and `users` routes with jwt
+- [x] protect `query` route with jwt
 - [ ] sesitize body inputs 
 - [ ] check for sql injection
 - [x] modularize the app

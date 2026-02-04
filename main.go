@@ -16,8 +16,6 @@ func main() {
 	defer db.Close()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", HandleBase)
-	mux.HandleFunc("POST /register", HandleRegister(db))
-	mux.HandleFunc("GET /users", ProtectRoute(HandleGetAllUsers(db)))
 	mux.HandleFunc("POST /auth", HandleLogin(db))
 	mux.HandleFunc("GET /query/{email}", ProtectRoute(HandleQuery(db)))
 

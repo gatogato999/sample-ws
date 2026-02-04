@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/mail"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func HandleBase(res http.ResponseWriter, req *http.Request) {
@@ -19,7 +17,7 @@ func HandleBase(res http.ResponseWriter, req *http.Request) {
 		res,
 		http.StatusOK,
 		map[string]string{
-			"msg": `implemented routes: POST /register GET /users POST /auth POST /query/{email}`,
+			"msg": `implemented routes: | POST /auth | POST /query/{email}`,
 		},
 	)
 }
@@ -122,99 +120,6 @@ func HandleLogin(db *sql.DB) http.HandlerFunc {
 				map[string]string{"error": "invalid email or password"},
 			)
 		}
-	}
-}
-
-func HandleGetAllUsers(db *sql.DB) http.HandlerFunc {
-	return func(res http.ResponseWriter, req *http.Request) {
-		users, err := GetAllUsers(db)
-		if err != nil {
-			UseJson(
-				res,
-				http.StatusInternalServerError,
-				map[string]string{"error": fmt.Sprint("database error", err)},
-			)
-			return
-		}
-		numberOfUsers := len(users)
-		uRes := map[string]any{"users": users, "numberOfUsers": numberOfUsers}
-		UseJson(res, http.StatusOK, uRes)
-	}
-}
-
-func HandleRegister(db *sql.DB) http.HandlerFunc {
-	return func(res http.ResponseWriter, req *http.Request) {
-		var u User
-		err := json.NewDecoder(req.Body).Decode(&u)
-		if err != nil {
-			UseJson(res, http.StatusBadRequest, map[string]string{"error": "bad request body"})
-			return
-		}
-		if u.FirstName == "" || u.LastName == "" || u.Phone == "" {
-			UseJson(
-				res,
-				http.StatusBadRequest,
-				map[string]string{"error": "u can't let those fields empty"},
-			)
-			return
-		}
-		if u.Age < 18 {
-			UseJson(
-				res,
-				http.StatusBadRequest,
-				map[string]string{"error": "age can't be less that 18"},
-			)
-			return
-		}
-		if len(u.HashedPassword) < 8 {
-			UseJson(
-				res,
-				http.StatusBadRequest,
-				map[string]string{"error": "password can'nt be less that 8"},
-			)
-			return
-		}
-		if _, err := mail.ParseAddress(u.Email); err != nil || u.Email == "" {
-			UseJson(
-				res,
-				http.StatusBadRequest,
-				map[string]string{"error": "invalid email"},
-			)
-			return
-		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(u.HashedPassword), 14)
-		if err != nil {
-			UseJson(
-				res,
-				http.StatusInternalServerError,
-				map[string]string{"error": "can't create user"},
-			)
-			return
-		}
-
-		u.HashedPassword = string(hash)
-
-		_, err = mail.ParseAddress(u.Email)
-		if err != nil {
-			UseJson(res, http.StatusBadRequest, map[string]string{"error": "invalid email"})
-			return
-		}
-
-		err = EmailExists(db, u.Email)
-		if err == nil {
-			UseJson(res, http.StatusBadRequest, map[string]string{"error": " already used email"})
-			return
-		}
-		err = InsertUser(db, u)
-		if err != nil {
-			UseJson(
-				res,
-				http.StatusInternalServerError,
-				map[string]string{"error": "database error"},
-			)
-			return
-		}
-		UseJson(res, http.StatusCreated, map[string]string{"msg": "new user created"})
 	}
 }
 

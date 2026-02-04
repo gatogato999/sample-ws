@@ -104,28 +104,3 @@ func GetUserByEmail(db *sql.DB, email string) (User, error) {
 
 	return u, nil
 }
-
-func GetAllUsers(db *sql.DB) ([]User, error) {
-	rows, err := db.Query(`select * from users `)
-	if err != nil {
-		return []User{}, err
-	}
-
-	defer rows.Close()
-
-	var users []User
-
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.Email,
-			&u.HashedPassword, &u.Phone, &u.Age, &u.Job); err != nil {
-			log.Printf("\ncan't copy value to user struct : %v", err)
-		}
-		users = append(users, u)
-	}
-	if err = rows.Err(); err != nil {
-		return []User{}, err
-	}
-
-	return users, nil
-}
